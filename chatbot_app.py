@@ -4,10 +4,6 @@ import os
 
 
 
-import pkg_resources
-print("Installed packages:")
-print([p.project_name for p in pkg_resources.working_set])
-
 
 load_dotenv()
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
