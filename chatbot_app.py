@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import os
 
-import bcrypt
+
 from dotenv import load_dotenv
 
 import pkg_resources
