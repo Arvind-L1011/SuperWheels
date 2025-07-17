@@ -18,10 +18,10 @@ def check_password(password, hashed):
 
 def connect_db():
     return mysql.connector.connect(
-        HOST_VAL = st.secrets["HOST_VAL"]
-        USER_VAL = st.secrets["USER_VAL"]
-        PASSWORD_VAL = st.secrets["PASSWORD_VAL"]
-        DATABASE_VAL = st.secrets["DATABASE_VAL"]
+        host = HOST_VAL,
+        user = USER_VAL,
+        password = PASSWORD_VAL,
+        database = DATABASE_VAL
 
     )
 
