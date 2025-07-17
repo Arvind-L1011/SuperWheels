@@ -3,7 +3,6 @@ import requests
 import os
 
 
-from dotenv import load_dotenv
 
 import pkg_resources
 print("Installed packages:")
