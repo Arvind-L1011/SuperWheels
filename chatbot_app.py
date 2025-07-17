@@ -7,6 +7,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+HOST_VAL = os.getenv("HOST_VAL")
+USER_VAL = os.getenv("USER_VAL")
+PASSWORD_VAL = os.getenv("PASSWORD_VAL")
+DATABASE_VAL = os.getenv("DATABASE_VAL")
 
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode() 
@@ -16,10 +20,10 @@ def check_password(password, hashed):
 
 def connect_db():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="Arvind@12",
-        database="cardb"
+        host = HOST_VAL,
+        user = USER_VAL,
+        password = PASSWORD_VAL,
+        database = DATABASE_VAL
     )
 
 def ask_together(prompt):
