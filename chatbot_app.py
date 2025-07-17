@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import os
-import mysql.connector
+
 import bcrypt
 from dotenv import load_dotenv
 
