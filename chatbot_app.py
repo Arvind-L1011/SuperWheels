@@ -1,12 +1,10 @@
 import streamlit as st
 import requests
 import os
+import mysql.connector
+import bcrypt
+TOGETHER_API_KEY = st.secrets["TOGETHER_API_KEY"]
 
-
-
-
-load_dotenv()
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 HOST_VAL = os.getenv("HOST_VAL")
 USER_VAL = os.getenv("USER_VAL")
 PASSWORD_VAL = os.getenv("PASSWORD_VAL")
@@ -20,10 +18,11 @@ def check_password(password, hashed):
 
 def connect_db():
     return mysql.connector.connect(
-        host = HOST_VAL,
-        user = USER_VAL,
-        password = PASSWORD_VAL,
-        database = DATABASE_VAL
+        HOST_VAL = st.secrets["HOST_VAL"]
+        USER_VAL = st.secrets["USER_VAL"]
+        PASSWORD_VAL = st.secrets["PASSWORD_VAL"]
+        DATABASE_VAL = st.secrets["DATABASE_VAL"]
+
     )
 
 def ask_together(prompt):
