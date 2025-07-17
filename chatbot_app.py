@@ -5,6 +5,11 @@ import mysql.connector
 import bcrypt
 from dotenv import load_dotenv
 
+import pkg_resources
+print("Installed packages:")
+print([p.project_name for p in pkg_resources.working_set])
+
+
 load_dotenv()
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 HOST_VAL = os.getenv("HOST_VAL")
