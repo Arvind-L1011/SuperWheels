@@ -71,13 +71,14 @@ def execute_db_query(query):
 
         if not rows:
             return "No results found."
-        if "car_id" in columns:
-            car_id_index = columns.index("car_id")
-            columns = [col for col in columns if col != "car_id"]
-            rows = [
-                tuple(val for idx, val in enumerate(row) if idx != car_id_index)
-                for row in rows
-            ]
+
+        remove_cols = {"car_id", "spec_id"}
+        remove_indexes = [i for i, col in enumerate(columns) if col in remove_cols]
+
+        for index in sorted(remove_indexes, reverse=True):
+            columns.pop(index)
+            rows = [tuple(val for i, val in enumerate(row) if i != index) for row in rows]
+
         result = ""
         for row in rows:
             row_str = ", ".join(f"{col}: {val}" for col, val in zip(columns, row))
@@ -86,7 +87,6 @@ def execute_db_query(query):
 
     except Exception as e:
         return f"DB Error:\n{str(e)}\n\nQuery:\n{query}"
-    
 
 def ask_combined(prompt):
     if is_db_question(prompt):
@@ -164,7 +164,7 @@ def ask_combined(prompt):
         - Use JOINs when needed to include fields from both `car` and `spec` tables.
         - Always use correct column names from the given schema.
         - For questions like "highest", "lowest", "top", or similar, return all relevant columns **except car_id**.
-        - Do NOT include 'car_id' in the SELECT clause
+        - Do NOT include `car_id` or `spec_id` in the SELECT clause
         - Do not include backticks or markdown formatting (no ```sql or ```).
         - Return ONLY the final valid MySQL SELECT query.
         - Do not explain, describe, or annotate the query.
