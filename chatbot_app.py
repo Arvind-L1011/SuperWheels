@@ -156,7 +156,7 @@ def ask_combined(prompt):
         - Add appropriate WHERE clauses based on the user's question.
         - Use JOINs when needed to include fields from both `car` and `spec` tables.
         - Always use correct column names from the given schema.
-        - Avoid including 'car_id' in the SELECT clause unless explicitly asked for.
+        - For questions like "highest", "lowest", "top", or similar, return all relevant columns **except car_id**.
         - Do not include backticks or markdown formatting (no ```sql or ```).
         - Return ONLY the final valid MySQL SELECT query.
         - Do not explain, describe, or annotate the query.
