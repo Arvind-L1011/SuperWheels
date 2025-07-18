@@ -103,7 +103,9 @@ def ask_combined(prompt):
         - Use only the column names listed above exactly as written.
         - If the user misspells a column name (e.g., "milege"), intelligently infer and map it to the correct column name (e.g., "mileage").
         - If the user misspells a data value (e.g., "Toyata" instead of "Toyota", or "disel" instead of "diesel"), intelligently infer and correct it using common known values.
+
         When generating SQL queries based on user questions:
+
         1. If the user asks:
         - "how many cars"
         - "total quantity"
@@ -111,19 +113,44 @@ def ask_combined(prompt):
         - "cars available"
         → Use:
         SELECT SUM(c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE ...
+
         2. If the user asks:
-        - "how much will it cost"
+        -"how much will it cost"
         - "total cost"
         - "value of cars"
         - "price to sell all cars"
         → Use:
         SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE ...
-        3. Use JOIN between `car` and `spec` on `car_id` when filtering by `engine_type`, `mileage`, etc.
+
+        3. If the user asks:
+        - "price of [car model]"
+        - "cost of one [car model]"
+        - "how much is [car model]"
+        → Use:
+        SELECT c.price FROM car c WHERE c.model = '...';
+
+        → However, if the user includes:
+        - "all [model] cars"
+        - "total price of [model]"
+        - "cost of all [model]"
+        → Then use:
+        SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.model = '...';
+
+        4. Use JOIN between `car` and `spec` on `car_id` when filtering by `engine_type`, `mileage`, etc.
+
         # Examples:
         Q: How many red Kia cars are available?
         A: SELECT SUM(c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.brand = 'Kia' AND c.color = 'Red';
+
         Q: How much will it cost to sell all Tata petrol cars?
         A: SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.brand = 'Tata' AND s.engine_type = 'Petrol';
+
+        Q: What is the price of EV6?
+        A: SELECT c.price FROM car c WHERE c.model = 'EV6';
+
+        Q: What is the price of all Fortuner cars?
+        A: SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.model = 'Fortuner';
+
         - Use contextual understanding to resolve close matches in brand, engine_type, color, model, etc.
         - Assume the user is asking about car inventory and specifications.
         - Add appropriate WHERE clauses based on the user's question.
@@ -133,6 +160,7 @@ def ask_combined(prompt):
         - Do not include backticks or markdown formatting (no ```sql or ```).
         - Return ONLY the final valid MySQL SELECT query.
         - Do not explain, describe, or annotate the query.
+
         Now convert the following question to SQL:
         "{prompt}"
         """
