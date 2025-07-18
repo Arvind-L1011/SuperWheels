@@ -65,7 +65,7 @@ def execute_db_query(query):
         cursor = conn.cursor()
         cursor.execute(query)
         rows = cursor.fetchall()
-        columns = [desc[0] for desc in cursor.description]
+        columns = [desc[0] for desc in cursor.description if desc[0] != "car_id"]
         cursor.close()
         conn.close()
 
