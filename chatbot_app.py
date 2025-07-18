@@ -3,9 +3,13 @@ import requests
 import os
 import mysql.connector
 import bcrypt
+from dotenv import load_dotenv
+
+load_dotenv()
 TOGETHER_API_KEY = st.secrets["TOGETHER_API_KEY"]
 
 HOST_VAL = os.getenv("HOST_VAL")
+PORT_VAL = os.getenv("PORT_VAL")
 USER_VAL = os.getenv("USER_VAL")
 PASSWORD_VAL = os.getenv("PASSWORD_VAL")
 DATABASE_VAL = os.getenv("DATABASE_VAL")
@@ -19,10 +23,10 @@ def check_password(password, hashed):
 def connect_db():
     return mysql.connector.connect(
         host = HOST_VAL,
+        port = int(PORT_VAL),
         user = USER_VAL,
         password = PASSWORD_VAL,
         database = DATABASE_VAL
-
     )
 
 def ask_together(prompt):
