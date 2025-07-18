@@ -71,15 +71,22 @@ def execute_db_query(query):
 
         if not rows:
             return "No results found."
+        if "car_id" in columns:
+            car_id_index = columns.index("car_id")
+            columns = [col for col in columns if col != "car_id"]
+            rows = [
+                tuple(val for idx, val in enumerate(row) if idx != car_id_index)
+                for row in rows
+            ]
         result = ""
         for row in rows:
             row_str = ", ".join(f"{col}: {val}" for col, val in zip(columns, row))
             result += row_str + "\n\n"
         return result.strip()
-    
+
     except Exception as e:
         return f"DB Error:\n{str(e)}\n\nQuery:\n{query}"
-
+    
 
 def ask_combined(prompt):
     if is_db_question(prompt):
