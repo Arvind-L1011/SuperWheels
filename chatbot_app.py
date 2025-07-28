@@ -312,10 +312,21 @@ def login():
         background-repeat: no-repeat;
         background-attachment: fixed;
     }
-    .block-container {
-        margin-right: 47rem !important;
-        padding-right: 5rem !important;
+    section.main > div {
+        background-color: transparent !important;
+        box-shadow: none !important;
+        padding: 0rem !important;
+        border: none !important;
     }
+
+    div[data-testid="stForm"], .block-container, .stContainer {
+        background-color: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
     </style>
     """,
     unsafe_allow_html=True
