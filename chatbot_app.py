@@ -373,32 +373,33 @@ def login():
             submitted = st.form_submit_button("Login")
             
             if submitted:
-                if not email or not password:
-                    st.warning("Please enter the credentials.")
-                else:
-                    conn = connect_db()
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT password, role FROM users WHERE email = %s", (email,))
-                    row = cursor.fetchone()
-                    cursor.close()
-                    conn.close()
-
-                    if row and check_password(password, row[0]):
-                        st.session_state.logged_in = True
-                        st.session_state.user_email = email
-                        st.session_state.user_role = row[1]
-
-                        log_conn = connect_db()
-                        log_cursor = log_conn.cursor()
-                        log_cursor.execute("INSERT INTO login_logs (email) VALUES (%s)", (email,))
-                        log_conn.commit()
-                        log_cursor.close()
-                        log_conn.close()
-
-                        st.success("Login successful!")
-                        st.rerun()
+                with st.spinner("Logging you in..."):
+                    if not email or not password:
+                        st.warning("Please enter the credentials.")
                     else:
-                        st.error("Invalid credentials.")     
+                        conn = connect_db()
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT password, role FROM users WHERE email = %s", (email,))
+                        row = cursor.fetchone()
+                        cursor.close()
+                        conn.close()
+
+                        if row and check_password(password, row[0]):
+                            st.session_state.logged_in = True
+                            st.session_state.user_email = email
+                            st.session_state.user_role = row[1]
+
+                            log_conn = connect_db()
+                            log_cursor = log_conn.cursor()
+                            log_cursor.execute("INSERT INTO login_logs (email) VALUES (%s)", (email,))
+                            log_conn.commit()
+                            log_cursor.close()
+                            log_conn.close()
+
+                            st.success("Login successful!")
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials.")       
 def create_pdf_response(user, assistant, fig=None):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
