@@ -312,6 +312,10 @@ def login():
         background-repeat: no-repeat;
         background-attachment: fixed;
     }
+    .block-container {
+        margin-right: 47rem !important;
+        padding-right: 5rem !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
