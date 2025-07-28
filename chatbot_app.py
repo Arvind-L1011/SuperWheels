@@ -3,6 +3,13 @@ import requests
 import os
 import mysql.connector
 import bcrypt
+import io
+import matplotlib.pyplot as plt
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.units import inch
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,10 +43,21 @@ def ask_together(prompt):
         "Content-Type": "application/json"
     }
 
-    messages = [{"role": "system", "content": "You are a helpful assistant."}]
-    for msg in st.session_state.chat_history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": prompt})
+    system_msg = {"role": "system", "content": "You are a helpful assistant."}
+    user_msg = {"role": "user", "content": prompt}
+
+    history = [msg for msg in st.session_state.chat_history if msg.get("content_type", "text") == "text"]
+    messages = [system_msg] + [{"role": msg["role"], "content": msg["content"]} for msg in history] + [user_msg]
+
+    def count_tokens(text):
+        return len(text) // 4
+
+    token_budget = 7000
+    total_tokens = sum(count_tokens(msg["content"]) for msg in messages)
+
+    while total_tokens > token_budget and len(messages) > 2:
+        messages.pop(1)
+        total_tokens = sum(count_tokens(msg["content"]) for msg in messages)
 
     data = {
         "model": "meta-llama/Llama-3-8b-chat-hf",
@@ -58,6 +76,10 @@ def is_db_question(prompt):
     db_keywords = [
     "list", "show", "find", "get", "fetch", "display", "view", "retrieve", "mileage", "engine", "price", "brand", "model", "year", "manufacture", "color", "quantity", "available", "stock", "petrol", "diesel", "ev", "electric", "fuel", "engine type", "battery", "hybrid", "above", "below", "under", "over", "greater", "less", "between", "top", "lowest", "highest", "toyota", "honda", "tata", "hyundai", "mahindra", "kia", "carens", "creta", "nexon", "xuv", "city", "car", "cars", "vehicle", "vehicles", "models"]
     return any(word in prompt.lower() for word in db_keywords)
+
+def user_requested_graph(prompt):
+    graph_keywords = ["graph", "bar graph", "bar chart", "plot", "show graph", "chart"]
+    return any(word in prompt.lower() for word in graph_keywords)
 
 def execute_db_query(query):
     try:
@@ -83,10 +105,10 @@ def execute_db_query(query):
         for row in rows:
             row_str = ", ".join(f"{col}: {val}" for col, val in zip(columns, row))
             result += row_str + "\n\n"
-        return result.strip()
+        return {"columns": columns, "rows": rows}
 
     except Exception as e:
-        return f"DB Error:\n{str(e)}\n\nQuery:\n{query}"
+        return {"error": f"DB Error:\n{str(e)}\n\nQuery:\n{query}"}
 
 def ask_combined(prompt):
     if is_db_question(prompt):
@@ -166,15 +188,16 @@ def ask_combined(prompt):
         - For questions like "highest", "lowest", "top", or similar, return all relevant columns **except car_id**.
         - Do NOT include `car_id` or `spec_id` in the SELECT clause
         - Do not include backticks or markdown formatting (no ```sql or ```).
+        - Only return valid SQL statements. Do not include any explanation or prefix.
         - Return ONLY the final valid MySQL SELECT query.
-        - Do not explain, describe, or annotate the query.
+        - Do not explain, describe, or annotate the query. 
 
         Now convert the following question to SQL:
         "{prompt}"
         """
         sql_query = ask_together(sql_prompt)
         if sql_query.startswith("[TOGETHER API ERROR]"):
-            return sql_query
+            return {"error": sql_query}
         return execute_db_query(sql_query)
     else:
         return ask_together(prompt)
@@ -278,14 +301,25 @@ if "user_role" not in st.session_state:
     st.session_state.user_role = None
 
 def login():
-    st.markdown("""
-        <style>
-        .stApp {
-            background-color: #3366ff;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
+    st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.4)),
+                    url('https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?q=80&w=1283&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+    .block-container {
+        margin-right: 47rem !important;
+        padding-right: 5rem !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+    )
     st.title("Login / Sign up")
 
     if "last_action" not in st.session_state:
@@ -296,71 +330,283 @@ def login():
         st.session_state.password = ""
         st.session_state.last_action = st.session_state.action
 
-    action = st.radio("Choose an Option", ["Login", "Sign up"], key="action", on_change=switch_action)
-    email = st.text_input("Email ID", placeholder="Enter Email", key="email")
-    password = st.text_input("Password", type="password", placeholder="Enter Password", key="password")
-
+    action = st.radio("Choose an Option", ["Login", "Sign up"], key="action", on_change=switch_action, horizontal=True)
+    
     if action=="Sign up":
-        if st.button("Create Account"):
-            conn = connect_db()
-            cursor = conn.cursor()
-            try:
-                hashed_pw = hash_password(password)
-                cursor.execute("INSERT INTO users (email, password, role) VALUES (%s, %s, 'user')", (email, hashed_pw))
-                conn.commit()
-                st.success("Account Created Successfully")
-            except mysql.connector.errors.IntegrityError:
-                st.error("Email Already Exists")
-            cursor.close()
-            conn.close()
+        with st.form("signup_form", clear_on_submit=False):
+            email = st.text_input("Email ID", placeholder="Enter Email", key="signup_email")
+            password = st.text_input("Password", type="password", placeholder="Enter Password", key="signup_password")
+
+            submitted = st.form_submit_button("Create Account")
+
+            if submitted:
+                if not email or not password:
+                    st.warning("Please enter password.")
+                else:
+                    conn = connect_db()
+                    cursor = conn.cursor()
+                    try:
+                        hashed_pw = hash_password(password)
+                        cursor.execute("INSERT INTO users (email, password, role) VALUES (%s, %s, 'user')", (email, hashed_pw))
+                        conn.commit()
+                        st.success("Account Created Successfully")
+                    except mysql.connector.errors.IntegrityError:
+                        st.error("Email Already Exists")
+                    cursor.close()
+                    conn.close()
 
     elif action == "Login":
-        if st.button("Login"):
-            conn = connect_db()
-            cursor = conn.cursor()
-            cursor.execute("SELECT password, role FROM users WHERE email = %s",(email,))
-            row = cursor.fetchone()
-            cursor.close()
-            conn.close()
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("Email ID", placeholder="Enter Email", key="login_email")
+            password = st.text_input("Password", type="password", placeholder="Enter Password", key="login_password")
+            
+            submitted = st.form_submit_button("Login")
+            
+            if submitted:
+                if not email or not password:
+                    st.warning("Please enter password.")
+                else:
+                    conn = connect_db()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT password, role FROM users WHERE email = %s", (email,))
+                    row = cursor.fetchone()
+                    cursor.close()
+                    conn.close()
 
-            if row and check_password(password,row[0]):
-                st.session_state.logged_in = True
-                st.session_state.user_email = email
-                st.session_state.user_role = row[1]
+                    if row and check_password(password, row[0]):
+                        st.session_state.logged_in = True
+                        st.session_state.user_email = email
+                        st.session_state.user_role = row[1]
 
-                log_conn = connect_db()
-                log_cursor = log_conn.cursor()
-                log_cursor.execute("INSERT INTO login_logs (email) VALUES (%s)", (email,))
-                log_conn.commit()
-                log_cursor.close()
-                log_conn.close()
+                        log_conn = connect_db()
+                        log_cursor = log_conn.cursor()
+                        log_cursor.execute("INSERT INTO login_logs (email) VALUES (%s)", (email,))
+                        log_conn.commit()
+                        log_cursor.close()
+                        log_conn.close()
 
-                st.success("Login successful!")
-                st.rerun()
-            else:
-                st.error("Invalid credentials.")
+                        st.success("Login successful!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials.")     
+def create_pdf_response(user, assistant, fig=None):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    elements = []
+
+    styles = getSampleStyleSheet()
+    elements.append(Paragraph(f"<b>User:</b> {user}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    if isinstance(assistant, dict) and "columns" in assistant and "rows" in assistant:
+        elements.append(Paragraph("<b>Assistant Response (Table):</b>", styles["Normal"]))
+        elements.append(Spacer(1, 12))
+
+        data = [assistant["columns"]] + list(assistant["rows"])
+        table = Table(data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.black),
+        ]))
+        elements.append(table)
+
+        if fig:
+            from reportlab.platypus import Image
+            import tempfile
+
+            elements.append(Spacer(1, 24))
+            elements.append(Paragraph("<b>Graph:</b>", styles["Normal"]))
+            elements.append(Spacer(1, 12))
+
+            if hasattr(fig, "savefig"):
+                tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                fig.savefig(tmpfile.name, format="png", bbox_inches="tight")
+                tmpfile.close()
+                elements.append(Image(tmpfile.name, width=6 * inch, height=4 * inch))
+            elif isinstance(fig, str):
+                elements.append(Image(fig, width=6 * inch, height=4 * inch))
+
+    else:
+        elements.append(Paragraph(f"<b>Assistant:</b> {assistant}", styles["Normal"]))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+def generate_bar_graph(columns, rows):
+    try:
+        if not rows or len(columns) <2:
+            return None
+        x_vals = [str(row[0]) for row in rows]
+        y_vals = [float(row[1])for row in rows]
+        fig, ax = plt.subplots()
+        ax.bar(x_vals,y_vals, color='blue')
+        ax.set_xlabel(columns[0])
+        ax.set_ylabel(columns[1])
+        ax.set_title(f"{columns[1]} vs {columns[0]}")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        return fig
+    except Exception as e:
+            st.error(f"Error generating graph: {e}")
+            return None     
 
 def chatbot():
     st.title("Super Wheels Chatbot")
-    question = st.chat_input("Ask Something...")
-    if question:
-        st.session_state.chat_history.append({"role": "user", "content": question})
-        answer = ask_combined(question)
-        st.session_state.chat_history.append({"role": "assistant", "content": answer})
-    for msg in st.session_state.chat_history:
+    question = st.chat_input("Fuel me with your questions...")
+    for idx, msg in enumerate(st.session_state.chat_history):
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            if msg.get("content_type") == "table":
+                st.dataframe([dict(zip(msg["columns"], row)) for row in msg["rows"]])
+
+                fig_path = None
+                if "graph" in msg and msg["graph"]:
+                    try:
+                        import tempfile
+                        from reportlab.platypus import Image
+                        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                        tmpfile.write(msg["graph"])
+                        tmpfile.flush()
+                        tmpfile.close()
+                        fig_path = tmpfile.name
+                        buf = io.BytesIO(msg["graph"])
+                        img = plt.imread(buf, format='png')
+                        fig = plt.figure()
+                        ax = fig.add_subplot(111)
+                        ax.imshow(img)
+                        ax.axis("off")
+                        st.pyplot(fig)
+
+                    except Exception as e:
+                        st.error(f"Failed to reload graph image: {e}")
+
+                for j in range(idx - 1, -1, -1):
+                    if st.session_state.chat_history[j]["role"] == "user":
+                        user_msg = st.session_state.chat_history[j]["content"]
+                        break
+                else:
+                    user_msg = "Unknown"
+
+                pdf_file = create_pdf_response(user_msg, {
+                    "columns": msg["columns"],
+                    "rows": msg["rows"]
+                }, fig_path)
+
+                st.download_button(
+                    label="📄 Download",
+                    data=pdf_file,
+                    file_name="chat_table_response.pdf",
+                    mime="application/pdf",
+                    key=f"download_table_{idx}"
+                )
+            elif msg["role"] == "assistant":
+                st.markdown(msg["content"])
+                
+                for j in range(idx - 1, -1, -1):
+                    if st.session_state.chat_history[j]["role"] == "user":
+                        user_msg = st.session_state.chat_history[j]["content"]
+                        break
+                else:
+                    user_msg = "Unknown"
+
+                pdf_file = create_pdf_response(user_msg, msg["content"])
+                st.download_button(
+                    label="📄 Download",
+                    data=pdf_file,
+                    file_name="chat_response.pdf",
+                    mime="application/pdf",
+                    key=f"download_text_{idx}"
+                )
+
+            else:
+                st.markdown(msg["content"])
+    if question:
+        with st.chat_message("user"):
+            st.markdown(question)
+        st.session_state.chat_history.append({"role": "user", "content": question})
+
+        with st.chat_message("assistant"):
+            with st.spinner("Revving the engines...🚗💨"):
+                answer = ask_combined(question)
+
+            if isinstance(answer, dict) and "columns" in answer and "rows" in answer:
+                st.dataframe([dict(zip(answer["columns"], row)) for row in answer["rows"]])
+
+                fig = None
+                fig_bytes = None
+                if user_requested_graph(question):
+                    fig = generate_bar_graph(answer["columns"], answer["rows"])
+                    if fig:
+                        st.pyplot(fig)
+                        buf = io.BytesIO()
+                        fig.savefig(buf, format="png")
+                        buf.seek(0)
+                        fig_bytes = buf.read()
+                    else:
+                        st.error("Unable to generate graph")
+
+                pdf_file = create_pdf_response(question, answer, fig)
+                st.download_button(
+                    label="📄 Download",
+                    data=pdf_file,
+                    file_name="query_response.pdf",
+                    mime="application/pdf",
+                    key=f"download_table_{len(st.session_state.chat_history)}"
+                )
+
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content_type": "table",
+                    "columns": answer["columns"],
+                    "rows": answer["rows"],
+                    "graph": fig_bytes
+                })
+            elif isinstance(answer, dict) and "error" in answer:
+                st.error(answer["error"])
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content_type": "text",
+                    "content": answer["error"]
+                })
+            else:
+                st.markdown(answer)
+                pdf_file = create_pdf_response(question, answer)
+                st.download_button(
+                    label="📄 Download",
+                    data=pdf_file,
+                    file_name="chat_response.pdf",
+                    mime="application/pdf",
+                    key=f"download_button_{len(st.session_state.chat_history)}"
+                )
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content_type": "text",
+                    "content": answer
+                })
 
 if not st.session_state.free_used and not st.session_state.logged_in:
     st.title("Super Wheels Chatbot")
     st.info("You get 1 free question without login!")
-    question = st.chat_input("Ask Something...")
+    question = st.chat_input("Fuel me with your questions...")
     if question:
-        answer = ask_combined(question)
         st.chat_message("user").markdown(question)
-        st.chat_message("assistant").markdown(answer)
+        with st.spinner("Revving the engines...🚗💨"):
+            answer = ask_combined(question)
+        with st.chat_message("assistant"):
+            if isinstance(answer, dict) and "columns" in answer and "rows" in answer:
+                st.dataframe([dict(zip(answer["columns"], row)) for row in answer["rows"]])
+            elif isinstance(answer, dict) and "error" in answer:
+                st.error(answer["error"])
+            else:
+                st.markdown(answer)
+
         st.session_state.free_used = True
         st.success("Free question used. Please login to continue.")
+
         if st.button("Login Now"):
             st.session_state.force_login = True
             st.rerun()
@@ -371,9 +617,9 @@ else:
     else:
         if st.session_state.user_role == "admin":
             st.sidebar.title("Admin Panel")
-            view = st.sidebar.radio("Navigate", ["Dashboard", "Chatbot"])
+            view = st.sidebar.radio("", ["📊Dashboard", "👾🚀𖠌🧠Chatbot"])
 
-            if view == "Dashboard":
+            if view == "📊Dashboard":
                 admin_dashboard()
             else:
                 chatbot()
