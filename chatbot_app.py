@@ -350,20 +350,21 @@ def login():
             submitted = st.form_submit_button("Create Account")
 
             if submitted:
-                if not email or not password:
-                    st.warning("Please enter the credentials.")
-                else:
-                    conn = connect_db()
-                    cursor = conn.cursor()
-                    try:
-                        hashed_pw = hash_password(password)
-                        cursor.execute("INSERT INTO users (email, password, role) VALUES (%s, %s, 'user')", (email, hashed_pw))
-                        conn.commit()
-                        st.success("Account Created Successfully")
-                    except mysql.connector.errors.IntegrityError:
-                        st.error("Email Already Exists")
-                    cursor.close()
-                    conn.close()
+                with st.spinner("Creating a new account..."):
+                    if not email or not password:
+                        st.warning("Please enter the credentials.")
+                    else:
+                        conn = connect_db()
+                        cursor = conn.cursor()
+                        try:
+                            hashed_pw = hash_password(password)
+                            cursor.execute("INSERT INTO users (email, password, role) VALUES (%s, %s, 'user')", (email, hashed_pw))
+                            conn.commit()
+                            st.success("Account Created Successfully")
+                        except mysql.connector.errors.IntegrityError:
+                            st.error("Email Already Exists")
+                        cursor.close()
+                        conn.close()
 
     elif action == "Login":
         with st.form("login_form", clear_on_submit=False):
