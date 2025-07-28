@@ -628,7 +628,7 @@ else:
     else:
         if st.session_state.user_role == "admin":
             st.sidebar.title("Admin Panel")
-            view = st.sidebar.radio("", ["📊Dashboard", "👾🚀𖠌🧠Chatbot"])
+            view = st.sidebar.radio("", ["📊Dashboard", "👾Chatbot"])
 
             if view == "📊Dashboard":
                 admin_dashboard()
