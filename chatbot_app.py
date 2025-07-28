@@ -326,10 +326,6 @@ def login():
         padding: 5 !important;
         margin: 0 !important;
     }
-    .block-container {
-        margin-right: 47rem !important;
-        padding-right: 5rem !important;
-    }
     </style>
     """,
     unsafe_allow_html=True
@@ -355,7 +351,7 @@ def login():
 
             if submitted:
                 if not email or not password:
-                    st.warning("Please enter password.")
+                    st.warning("Please enter the credentials.")
                 else:
                     conn = connect_db()
                     cursor = conn.cursor()
@@ -378,7 +374,7 @@ def login():
             
             if submitted:
                 if not email or not password:
-                    st.warning("Please enter password.")
+                    st.warning("Please enter the credentials.")
                 else:
                     conn = connect_db()
                     cursor = conn.cursor()
