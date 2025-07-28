@@ -323,7 +323,7 @@ def login():
         background-color: transparent !important;
         box-shadow: none !important;
         border: none !important;
-        padding: 0 !important;
+        padding: 5 !important;
         margin: 0 !important;
     }
     
