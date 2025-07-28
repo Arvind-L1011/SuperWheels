@@ -326,7 +326,10 @@ def login():
         padding: 5 !important;
         margin: 0 !important;
     }
-    
+    .block-container {
+        margin-right: 47rem !important;
+        padding-right: 5rem !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
