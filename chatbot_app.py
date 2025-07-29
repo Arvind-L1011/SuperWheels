@@ -108,7 +108,7 @@ def execute_db_query(query):
         return {"columns": columns, "rows": rows}
 
     except Exception as e:
-        return {"error": f"DB Error:\n{str(e)}\n\nQuery:\n{query}"}
+        return {"error": "There was a problem executing your request. Please try again later."}
 
 def ask_combined(prompt):
     if is_db_question(prompt):
@@ -203,7 +203,7 @@ def ask_combined(prompt):
         return ask_together(prompt)
 
 def admin_dashboard():
-    st.title("Admin Dashboard")
+    st.title("🧑‍💼 Admin Dashboard")
     tab_1,tab_2,tab_3 = st.tabs(["User","Logs","Car Inventory"])
 
     with tab_1:
@@ -304,14 +304,6 @@ def login():
     st.markdown(
     """
     <style>
-    .stApp {
-        background: linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.4)),
-                    url('https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?q=80&w=1283&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }
     section.main > div {
         background-color: transparent !important;
         box-shadow: none !important;
@@ -371,7 +363,7 @@ def login():
             email = st.text_input("Email ID", placeholder="Enter Email", key="login_email")
             password = st.text_input("Password", type="password", placeholder="Enter Password", key="login_password")
             
-            submitted = st.form_submit_button("Login")
+            submitted = st.form_submit_button("Login") 
             
             if submitted:
                 with st.spinner("Logging you in..."):
@@ -400,7 +392,8 @@ def login():
                             st.success("Login successful!")
                             st.rerun()
                         else:
-                            st.error("Invalid credentials.")       
+                            st.error("Invalid credentials.")  
+
 def create_pdf_response(user, assistant, fig=None):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
@@ -468,7 +461,7 @@ def generate_bar_graph(columns, rows):
             return None     
 
 def chatbot():
-    st.title("Super Wheels Chatbot")
+    st.title("🤖 Chatbot")
     question = st.chat_input("Fuel me with your questions...")
     for idx, msg in enumerate(st.session_state.chat_history):
         with st.chat_message(msg["role"]):
@@ -601,29 +594,18 @@ def chatbot():
                 })
 
 if not st.session_state.free_used and not st.session_state.logged_in:
+    logo_img_url = "https://cdn-icons-png.flaticon.com/512/465/465077.png"
+
     st.markdown(
-    """
-    <style>
-    html, body, [data-testid="stAppViewContainer"] {
-        height: 100%;
-        min-height: 100vh;
-        margin: 0;
-        padding: 0;
-    }
-    .stApp {
-        min-height: 100vh;
-        min-width: 100vw;
-        background: linear-gradient(135deg, #23243a, #5a2d82);
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-    st.title("Super Wheels Chatbot")
+        f"""
+        <div style="display: flex; align-items: center;">
+            <img src="{logo_img_url}" alt="icon" style="width:40px; height:40px; margin-right:10px;">
+            <h1 style="margin: 0; font-size: 50px;">Super Wheels</h1>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.subheader("🤖 Chatbot")
     st.info("You get 1 free question without login!")
     question = st.chat_input("Fuel me with your questions...")
     if question:
@@ -650,10 +632,44 @@ else:
         login()
     else:
         if st.session_state.user_role == "admin":
-            st.sidebar.title("Admin Panel")
-            view = st.sidebar.radio("", ["📊Dashboard", "👾Chatbot"])
+            logo_img_url = "https://cdn-icons-png.flaticon.com/512/465/465077.png"
+            st.sidebar.markdown(
+                f"""
+                <div style="display: flex; align-items: center;">
+                    <img src="{logo_img_url}" alt="icon" style="width:32px; height:32px; margin-right:10px;">
+                    <h1 style="margin: 0; font-size: 28px;">Super Wheels</h1>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-            if view == "📊Dashboard":
+            st.sidebar.markdown("""
+            <style>
+            div.stButton > button {
+                width: 200px; 
+                height: 48px; 
+                font-size: 20px;  
+                font-weight: 600;
+                border-radius: 10px;
+                margin-bottom: 16px; 
+           
+                transition: background-color 0.3s ease, color 0.3s ease;
+            }
+            div.stButton > button:hover {
+                background-color: rgba(255,255,255,0.1); 
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+            if st.sidebar.button("Dashboard"):
+                st.session_state.view = "Dashboard"
+            if st.sidebar.button("Chatbot"):
+                st.session_state.view = "Chatbot"
+
+            if "view" not in st.session_state:
+                st.session_state.view = "Dashboard"
+
+            if st.session_state.view == "Dashboard":
                 admin_dashboard()
             else:
                 chatbot()
