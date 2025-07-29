@@ -600,7 +600,7 @@ if not st.session_state.free_used and not st.session_state.logged_in:
         f"""
         <div style="display: flex; align-items: center;">
             <img src="{logo_img_url}" alt="icon" style="width:40px; height:40px; margin-right:10px;">
-            <h1 style="margin: 0; font-size: 50px;">Super Wheels</h1>
+            <h1 style="margin: 0; font-size: 45px;">Super Wheels</h1>
         </div>
         """,
         unsafe_allow_html=True,
