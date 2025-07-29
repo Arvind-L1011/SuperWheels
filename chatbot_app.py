@@ -601,6 +601,28 @@ def chatbot():
                 })
 
 if not st.session_state.free_used and not st.session_state.logged_in:
+    st.markdown(
+    """
+    <style>
+    html, body, [data-testid="stAppViewContainer"] {
+        height: 100%;
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+    }
+    .stApp {
+        min-height: 100vh;
+        min-width: 100vw;
+        background: linear-gradient(135deg, #23243a, #5a2d82);
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
     st.title("Super Wheels Chatbot")
     st.info("You get 1 free question without login!")
     question = st.chat_input("Fuel me with your questions...")
