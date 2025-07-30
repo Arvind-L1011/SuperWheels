@@ -3,6 +3,6 @@ requests
 python-dotenv
 mysql-connector-python
 bcrypt
-matplotlib
 reportlab
-cffi
+pandas
+plotly
