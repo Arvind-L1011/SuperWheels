@@ -4,8 +4,12 @@ import requests
 import os
 import mysql.connector
 import bcrypt
-import pandas as pd
-import plotly.express as px
+import matplotlib.pyplot as plt
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.units import inch
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -70,7 +74,7 @@ def ask_together(prompt):
 
 def is_db_question(prompt):
     db_keywords = [
-    "list", "show", "find", "get", "fetch", "display", "view", "retrieve", "mileage", "engine", "price", "brand", "model", "year", "manufacture", "color", "quantity", "available", "stock", "petrol", "diesel", "fuel", "engine type", "hybrid", "above", "below", "under", "over", "greater", "less", "between", "top", "lowest", "highest", "toyota", "honda", "tata", "hyundai", "mahindra", "kia", "carens", "creta", "nexon", "xuv", "city", "car", "cars", "vehicle", "vehicles", "models"]
+    "list", "show", "find", "get", "fetch", "display", "view", "retrieve", "mileage", "engine", "price", "brand", "model", "year", "manufacture", "color", "quantity", "available", "stock", "petrol", "diesel", "ev", "electric", "fuel", "engine type", "battery", "hybrid", "above", "below", "under", "over", "greater", "less", "between", "top", "lowest", "highest", "toyota", "honda", "tata", "hyundai", "mahindra", "kia", "carens", "creta", "nexon", "xuv", "city", "car", "cars", "vehicle", "vehicles", "models"]
     return any(word in prompt.lower() for word in db_keywords)
 
 def user_requested_graph(prompt):
@@ -169,6 +173,9 @@ def ask_combined(prompt):
 
         Q: How much will it cost to sell all Tata petrol cars?
         A: SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.brand = 'Tata' AND s.engine_type = 'Petrol';
+
+        Q: What is the price of EV6?
+        A: SELECT c.price FROM car c WHERE c.model = 'EV6';
 
         Q: What is the price of all Fortuner cars?
         A: SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.model = 'Fortuner';
@@ -388,12 +395,6 @@ def login():
                             st.error("Invalid credentials.")  
 
 def create_pdf_response(user, assistant, fig=None):
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib import colors
-    from reportlab.lib.units import inch
-
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     elements = []
@@ -419,22 +420,18 @@ def create_pdf_response(user, assistant, fig=None):
         elements.append(table)
 
         if fig:
+            from reportlab.platypus import Image
+            import tempfile
+
             elements.append(Spacer(1, 24))
             elements.append(Paragraph("<b>Graph:</b>", styles["Normal"]))
             elements.append(Spacer(1, 12))
 
             if hasattr(fig, "savefig"):
-                import tempfile
-
                 tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                 fig.savefig(tmpfile.name, format="png", bbox_inches="tight")
                 tmpfile.close()
                 elements.append(Image(tmpfile.name, width=6 * inch, height=4 * inch))
-
-            elif isinstance(fig, (bytes, bytearray)):
-                img_stream = io.BytesIO(fig)
-                elements.append(Image(img_stream, width=6 * inch, height=4 * inch))
-
             elif isinstance(fig, str):
                 elements.append(Image(fig, width=6 * inch, height=4 * inch))
 
@@ -447,16 +444,21 @@ def create_pdf_response(user, assistant, fig=None):
 
 def generate_bar_graph(columns, rows):
     try:
-        if not rows or len(columns) < 2:
-            return None, None
-        df = pd.DataFrame(rows, columns=columns)
-        fig = px.bar(df, x=columns[0], y=columns[1], title=f"{columns[1]} vs {columns[0]}")
-        fig.update_layout(xaxis_title=columns[0], yaxis_title=columns[1])
-        img_bytes = fig.to_image(format="png")
-        return fig, img_bytes
+        if not rows or len(columns) <2:
+            return None
+        x_vals = [str(row[0]) for row in rows]
+        y_vals = [float(row[1])for row in rows]
+        fig, ax = plt.subplots()
+        ax.bar(x_vals,y_vals, color='blue')
+        ax.set_xlabel(columns[0])
+        ax.set_ylabel(columns[1])
+        ax.set_title(f"{columns[1]} vs {columns[0]}")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        return fig
     except Exception as e:
-        st.error(f"Error generating graph: {e}")
-        return None, None     
+            st.error(f"Error generating graph: {e}")
+            return None     
 
 def chatbot():
     st.title("🤖 Chatbot")
@@ -466,12 +468,26 @@ def chatbot():
             if msg.get("content_type") == "table":
                 st.dataframe([dict(zip(msg["columns"], row)) for row in msg["rows"]])
 
-                graphdata = st.session_state.get(f"graphdata_{idx}", None)
-                img_bytes = None
-                if graphdata:
-                    fig, img_bytes = generate_bar_graph(graphdata['columns'], graphdata['rows'])
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                fig_path = None
+                if "graph" in msg and msg["graph"]:
+                    try:
+                        import tempfile
+                        from reportlab.platypus import Image
+                        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                        tmpfile.write(msg["graph"])
+                        tmpfile.flush()
+                        tmpfile.close()
+                        fig_path = tmpfile.name
+                        buf = io.BytesIO(msg["graph"])
+                        img = plt.imread(buf, format='png')
+                        fig = plt.figure()
+                        ax = fig.add_subplot(111)
+                        ax.imshow(img)
+                        ax.axis("off")
+                        st.pyplot(fig)
+
+                    except Exception as e:
+                        st.error(f"Failed to reload graph image: {e}")
 
                 for j in range(idx - 1, -1, -1):
                     if st.session_state.chat_history[j]["role"] == "user":
@@ -480,11 +496,11 @@ def chatbot():
                 else:
                     user_msg = "Unknown"
 
-                pdf_file = create_pdf_response(
-                    user_msg,
-                    {"columns": msg["columns"], "rows": msg["rows"]},
-                    img_bytes
-                )
+                pdf_file = create_pdf_response(user_msg, {
+                    "columns": msg["columns"],
+                    "rows": msg["rows"]
+                }, fig_path)
+
                 st.download_button(
                     label="📄 Download",
                     data=pdf_file,
@@ -492,9 +508,9 @@ def chatbot():
                     mime="application/pdf",
                     key=f"download_table_{idx}"
                 )
-
             elif msg["role"] == "assistant":
                 st.markdown(msg["content"])
+                
                 for j in range(idx - 1, -1, -1):
                     if st.session_state.chat_history[j]["role"] == "user":
                         user_msg = st.session_state.chat_history[j]["content"]
@@ -510,9 +526,9 @@ def chatbot():
                     mime="application/pdf",
                     key=f"download_text_{idx}"
                 )
+
             else:
                 st.markdown(msg["content"])
-
     if question:
         with st.chat_message("user"):
             st.markdown(question)
@@ -524,24 +540,21 @@ def chatbot():
 
             if isinstance(answer, dict) and "columns" in answer and "rows" in answer:
                 st.dataframe([dict(zip(answer["columns"], row)) for row in answer["rows"]])
+
                 fig = None
-                img_bytes = None
+                fig_bytes = None
                 if user_requested_graph(question):
-                    fig, img_bytes = generate_bar_graph(answer["columns"], answer["rows"])
+                    fig = generate_bar_graph(answer["columns"], answer["rows"])
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
-                        st.session_state[
-                            f"graphdata_{len(st.session_state.chat_history)}"
-                        ] = {
-                            "columns": answer["columns"],
-                            "rows": answer["rows"]
-                        }
+                        st.pyplot(fig)
+                        buf = io.BytesIO()
+                        fig.savefig(buf, format="png")
+                        buf.seek(0)
+                        fig_bytes = buf.read()
                     else:
                         st.error("Unable to generate graph")
-                else:
-                    img_bytes = None
 
-                pdf_file = create_pdf_response(question, answer, img_bytes)
+                pdf_file = create_pdf_response(question, answer, fig)
                 st.download_button(
                     label="📄 Download",
                     data=pdf_file,
@@ -549,11 +562,13 @@ def chatbot():
                     mime="application/pdf",
                     key=f"download_table_{len(st.session_state.chat_history)}"
                 )
+
                 st.session_state.chat_history.append({
                     "role": "assistant",
                     "content_type": "table",
                     "columns": answer["columns"],
-                    "rows": answer["rows"]
+                    "rows": answer["rows"],
+                    "graph": fig_bytes
                 })
             elif isinstance(answer, dict) and "error" in answer:
                 st.error(answer["error"])
@@ -585,7 +600,7 @@ if not st.session_state.free_used and not st.session_state.logged_in:
         f"""
         <div style="display: flex; align-items: center;">
             <img src="{logo_img_url}" alt="icon" style="width:40px; height:40px; margin-right:10px;">
-            <h1 style="margin: 0; font-size: 50px;">Super Wheels</h1>
+            <h1 style="margin: 0; font-size: 45px;">Super Wheels</h1>
         </div>
         """,
         unsafe_allow_html=True,
