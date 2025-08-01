@@ -217,6 +217,9 @@ def admin_dashboard():
         if not users:
             st.info("No other users found.")
         else:
+            col_1, col_2, col_3 = st.columns([4, 3, 5])
+            col_1.markdown("**Email**")
+            col_2.markdown("**Role**")
             for i,(email,role) in enumerate(users):
                 col_1,col_2,col_3 = st.columns([4,3,5])
                 col_1.write(email)
