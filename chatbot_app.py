@@ -337,7 +337,9 @@ def login():
 
     action = st.radio("Choose an Option", ["Login", "Sign up"], key="action", on_change=switch_action, horizontal=True)
     
-    if action=="Sign up":
+    import re
+    
+    if action == "Sign up":
         with st.form("signup_form", clear_on_submit=False):
             email = st.text_input("Email ID", placeholder="Enter Email", key="signup_email")
             password = st.text_input("Password", type="password", placeholder="Enter Password", key="signup_password")
@@ -348,6 +350,8 @@ def login():
                 with st.spinner("Creating a new account..."):
                     if not email or not password:
                         st.warning("Please enter the credentials.")
+                    elif not re.match(r'^(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{6,}$', password):
+                        st.warning("Password must be at least 6 characters long and include:\n- 1 uppercase letter\n- 1 number\n- 1 special character.")
                     else:
                         conn = connect_db()
                         cursor = conn.cursor()
