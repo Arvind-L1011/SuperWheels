@@ -400,6 +400,8 @@ def create_pdf_response(user, assistant, fig=None):
     elements = []
 
     styles = getSampleStyleSheet()
+    elements.append(Paragraph("Super Wheels Chatbot", styles["Title"]))
+    elements.append(Spacer(1, 12))
     elements.append(Paragraph(f"<b>User:</b> {user}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
