@@ -385,9 +385,13 @@ def login():
                             st.session_state.user_email = email
                             st.session_state.user_role = row[1]
 
+                            from datetime import datetime
+                            from zoneinfo import ZoneInfo
+
                             log_conn = connect_db()
                             log_cursor = log_conn.cursor()
-                            log_cursor.execute("INSERT INTO login_logs (email) VALUES (%s)", (email,))
+                            ist_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+                            log_cursor.execute("INSERT INTO login_logs (email, login_time) VALUES (%s, %s)",(email, ist_now))
                             log_conn.commit()
                             log_cursor.close()
                             log_conn.close()
