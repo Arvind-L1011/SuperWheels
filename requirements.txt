@@ -5,4 +5,5 @@ mysql-connector-python
 bcrypt
 matplotlib
 reportlab
-cffi
+pandas
+tzdata
