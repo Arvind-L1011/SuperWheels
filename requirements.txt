@@ -5,5 +5,8 @@ mysql-connector-python
 bcrypt
 matplotlib
 reportlab
+cffi
 pandas
-tzdata
+pillow
+pytz
+backports.zoneinfo; python_version < '3.9'
