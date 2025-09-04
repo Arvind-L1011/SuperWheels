@@ -60,7 +60,7 @@ def ask_together(prompt):
         total_tokens = sum(count_tokens(msg["content"]) for msg in messages)
 
     data = {
-        "model": "meta-llama/Llama-3-8b-chat-hf",
+        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "messages": messages,
         "temperature": 0.7,
         "max_tokens": 1024
