@@ -4,9 +4,7 @@ import requests
 import os
 import mysql.connector
 import bcrypt
-import time
 import matplotlib.pyplot as plt
-import speech_recognition as sr
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import letter
@@ -15,9 +13,7 @@ from reportlab.lib.units import inch
 from dotenv import load_dotenv
 
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+TOGETHER_API_KEY = st.secrets["TOGETHER_API_KEY"]
 
 HOST_VAL = os.getenv("HOST_VAL")
 PORT_VAL = os.getenv("PORT_VAL")
@@ -40,185 +36,45 @@ def connect_db():
         database = DATABASE_VAL
     )
 
-def ask_groq(prompt, temperature=0.7, max_tokens=1024, system_message="You are a helpful assistant."):
-    """
-    Send the messages to Groq chat completions endpoint and return the assistant text.
-    Returns a string on success or an error string starting with '[GROQ API ERROR]'.
-    """
-    if not GROQ_API_KEY:
-        return "[GROQ API ERROR] Missing GROQ_API_KEY environment variable."
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
+def ask_together(prompt):
+    url = "https://api.together.xyz/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {TOGETHER_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    # Build messages similar to OpenAI-style chat completions
-    system_msg = {"role": "system", "content": system_message}
+    system_msg = {"role": "system", "content": "You are a helpful assistant."}
     user_msg = {"role": "user", "content": prompt}
 
-    # Keep some conversation context from session chat_history if available
-    history = [msg for msg in st.session_state.get("chat_history", []) if msg.get("content_type", "text") == "text"]
+    history = [msg for msg in st.session_state.chat_history if msg.get("content_type", "text") == "text"]
     messages = [system_msg] + [{"role": msg["role"], "content": msg["content"]} for msg in history] + [user_msg]
 
-    # A rough token estimator (same approach as original)
     def count_tokens(text):
         return len(text) // 4
 
     token_budget = 7000
     total_tokens = sum(count_tokens(msg["content"]) for msg in messages)
+
     while total_tokens > token_budget and len(messages) > 2:
-        # pop the oldest assistant/user message after system
         messages.pop(1)
         total_tokens = sum(count_tokens(msg["content"]) for msg in messages)
 
-    payload = {
-        "model": GROQ_MODEL,
+    data = {
+        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens
+        "temperature": 0.7,
+        "max_tokens": 1024
     }
 
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=30)
-    except Exception as e:
-        return f"[GROQ API ERROR] Request failed: {e}"
-
-    if resp.status_code != 200:
-        # include body text for debugging
-        try:
-            return f"[GROQ API ERROR] {resp.status_code} - {resp.text}"
-        except:
-            return f"[GROQ API ERROR] {resp.status_code} - (unable to read response)"
-    try:
-        j = resp.json()
-    except Exception as e:
-        return f"[GROQ API ERROR] Could not parse JSON response: {e}"
-
-    # Try common response shapes; prefer choices[0].message.content (OpenAI-like)
-    try:
-        # new Groq endpoint is OpenAI-compatible: choices[0].message.content
-        return j["choices"][0]["message"]["content"]
-    except Exception:
-        # fallback: choices[0].text
-        try:
-            return j["choices"][0]["text"]
-        except Exception:
-            # last resort: full JSON string
-            return f"[GROQ API ERROR] Unexpected response shape: {j}"
-
-# ---------------------------
-# Replace original ask_together usage:
-def ask_together(prompt):
-    """
-    Backwards-compat shim: to minimize other code changes, keep same name.
-    Internally calls ask_groq.
-    """
-    return ask_groq(prompt)
-
-#-------------------------------
-
-def typing_effect(text, speed=0.005):
-    """Displays text with a typing animation."""
-    placeholder = st.empty()
-    displayed_text = ""
-
-    for char in text:
-        displayed_text += char
-        placeholder.markdown(displayed_text)
-        time.sleep(speed)
-
-    return placeholder
-
-#--------------------------------
-import pyttsx3
-import tempfile
-import base64
-
-def generate_tts_audio(text):
-    """
-    Convert text to base64 WAV audio fully offline using pyttsx3.
-    Returns base64 audio string or None on failure.
-    """
-    try:
-        engine = pyttsx3.init()
-
-        # Increase speed a bit (optional)
-        rate = engine.getProperty("rate")
-        engine.setProperty("rate", rate + 10)
-
-        # Temporary wav file
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        tmp_name = tmp.name
-        tmp.close()
-
-        engine.save_to_file(text, tmp_name)
-        engine.runAndWait()
-
-        with open(tmp_name, "rb") as f:
-            audio_base64 = base64.b64encode(f.read()).decode()
-
-        return audio_base64
-
-    except Exception as e:
-        print("TTS ERROR:", e)
-        return None
-
-def render_tts_button(audio_b64, key):
-    """Renders Speak button next to Download button on same line."""
-    html_code = f"""
-        <div style="display:flex; align-items:center; gap:12px; margin-top:6px;">
-
-            <audio id="tts_audio_{key}">
-                <source src="data:audio/wav;base64,{audio_b64}" type="audio/wav">
-            </audio>
-
-            <button id="tts_btn_{key}"
-                style="
-                    background:#2b82f6;
-                    color:white;
-                    border:none;
-                    padding:6px 14px;
-                    border-radius:6px;
-                    cursor:pointer;
-                    font-size:14px;
-                "
-                onclick="
-                    var audio = document.getElementById('tts_audio_{key}');
-                    var btn = document.getElementById('tts_btn_{key}');
-                    if (audio.paused) {{
-                        audio.play();
-                        btn.innerText='⛔ Stop';
-                    }} else {{
-                        audio.pause();
-                        audio.currentTime = 0;
-                        btn.innerText='🔊 Speak';
-                    }}
-                ">
-                🔊 Speak
-            </button>
-
-            <script>
-                var audio = document.getElementById("tts_audio_{key}");
-                var btn = document.getElementById("tts_btn_{key}");
-                audio.onended = function() {{
-                    btn.innerText = "🔊 Speak";
-                }};
-            </script>
-        </div>
-    """
-
-    st.components.v1.html(html_code, height=50)
-
-
-#---------------------------------
-
-# ---------------------------
+    response = requests.post(url, headers=headers, json=data)
+    if response.status_code == 200:
+        return response.json()['choices'][0]['message']['content']
+    else:
+        return f"[TOGETHER API ERROR] {response.status_code} - {response.text}"
 
 def is_db_question(prompt):
     db_keywords = [
-    "list", "show", "find", "get", "fetch", "display", "view", "retrieve", "mileage", "engine", "price", "brand", "model", "year", "manufacture", "color", "quantity", "available", "stock", "petrol", "diesel", "fuel", "engine type", "above", "below", "under", "over", "greater", "less", "between", "top", "lowest", "highest", "toyota", "honda", "tata", "hyundai", "mahindra", "kia", "carens", "creta", "nexon", "xuv", "city", "car", "cars", "vehicle", "vehicles", "models"]
+    "list", "show", "find", "get", "fetch", "display", "view", "retrieve", "mileage", "engine", "price", "brand", "model", "year", "manufacture", "color", "quantity", "available", "stock", "petrol", "diesel", "ev", "electric", "fuel", "engine type", "battery", "hybrid", "above", "below", "under", "over", "greater", "less", "between", "top", "lowest", "highest", "toyota", "honda", "tata", "hyundai", "mahindra", "kia", "carens", "creta", "nexon", "xuv", "city", "car", "cars", "vehicle", "vehicles", "models"]
     return any(word in prompt.lower() for word in db_keywords)
 
 def user_requested_graph(prompt):
@@ -241,11 +97,11 @@ def execute_db_query(query):
         remove_cols = {"car_id", "spec_id"}
         remove_indexes = [i for i, col in enumerate(columns) if col in remove_cols]
 
-        for index in sorted(remove_indexes, reverse=True):                                  
+        for index in sorted(remove_indexes, reverse=True):
             columns.pop(index)
             rows = [tuple(val for i, val in enumerate(row) if i != index) for row in rows]
 
-        result = ""                                                                         
+        result = ""
         for row in rows:
             row_str = ", ".join(f"{col}: {val}" for col, val in zip(columns, row))
             result += row_str + "\n\n"
@@ -318,6 +174,9 @@ def ask_combined(prompt):
         Q: How much will it cost to sell all Tata petrol cars?
         A: SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.brand = 'Tata' AND s.engine_type = 'Petrol';
 
+        Q: What is the price of EV6?
+        A: SELECT c.price FROM car c WHERE c.model = 'EV6';
+
         Q: What is the price of all Fortuner cars?
         A: SELECT SUM(c.price * c.quantity_available) FROM car c JOIN spec s ON c.car_id = s.car_id WHERE c.model = 'Fortuner';
 
@@ -329,11 +188,6 @@ def ask_combined(prompt):
         - For questions like "highest", "lowest", "top", or similar, return all relevant columns **except car_id**.
         - Do NOT include `car_id` or `spec_id` in the SELECT clause
         - Do not include backticks or markdown formatting (no ```sql or ```).
-
-        - When using aggregate functions, ALWAYS provide a clear alias name:
-        - Never return unnamed aggregate columns.
-        - The alias must be a single lowercase name with underscores.
-
         - Only return valid SQL statements. Do not include any explanation or prefix.
         - Return ONLY the final valid MySQL SELECT query.
         - Do not explain, describe, or annotate the query. 
@@ -341,16 +195,16 @@ def ask_combined(prompt):
         Now convert the following question to SQL:
         "{prompt}"
         """
-        sql_query = ask_groq(sql_prompt)
-        if isinstance(sql_query, str) and sql_query.startswith("[GROQ API ERROR]"):
+        sql_query = ask_together(sql_prompt)
+        if sql_query.startswith("[TOGETHER API ERROR]"):
             return {"error": sql_query}
         return execute_db_query(sql_query)
     else:
-        return ask_groq(prompt)
+        return ask_together(prompt)
 
 def admin_dashboard():
     st.title("🧑‍💼 Admin Dashboard")
-    tab_1,tab_2,tab_3,tab_4 = st.tabs(["User","Logs","Car Inventory", "Blocked Keywords"])
+    tab_1,tab_2,tab_3 = st.tabs(["User","Logs","Car Inventory"])
 
     with tab_1:
         st.subheader("User Registered")
@@ -363,11 +217,9 @@ def admin_dashboard():
         if not users:
             st.info("No other users found.")
         else:
-
             col_1, col_2, col_3 = st.columns([4, 3, 5])
             col_1.markdown("**Email**")
             col_2.markdown("**Role**")
-
             for i,(email,role) in enumerate(users):
                 col_1,col_2,col_3 = st.columns([4,3,5])
                 col_1.write(email)
@@ -436,41 +288,6 @@ def admin_dashboard():
             st.dataframe([dict(zip(columns, row)) for row in rows])
         else:
             st.info("No cars found")
-        
-    with tab_4:
-        st.subheader("Blocked Keywords Settings")
-
-        st.markdown("These keywords will be blocked from user queries.")
-
-        # Display existing keywords
-        keywords = get_blocked_keywords()
-
-        if keywords:
-            st.write("### Blocked Keywords:")
-            for i, kw in enumerate(keywords):
-                col1, col2 = st.columns([6, 1])
-                col1.write(f"- **{kw}**")
-                if col2.button("Delete", key=f"del_kw_{i}"):
-                    delete_blocked_keyword(kw)
-                    st.success(f"Deleted keyword: {kw}")
-                    st.rerun()
-        else:
-            st.info("No blocked keywords yet.")
-
-        st.write("---")
-        st.write("### ➕ Add New Keyword")
-
-        new_kw = st.text_input("Keyword to block", key="new_kw_input")
-        if st.button("Add Keyword"):
-            if new_kw.strip() == "":
-                st.warning("Keyword cannot be empty.")
-            else:
-                if add_blocked_keyword(new_kw.strip()):
-                    st.success(f"Added keyword: {new_kw}")
-                    st.rerun()
-                else:
-                    st.error("Keyword already exists or failed to insert.")
-
 
 
 st.set_page_config(page_title="Super Wheels", page_icon="🚙", layout="centered")
@@ -519,7 +336,7 @@ def login():
         st.session_state.last_action = st.session_state.action
 
     action = st.radio("Choose an Option", ["Login", "Sign up"], key="action", on_change=switch_action, horizontal=True)
-
+    
     import re
     
     if action == "Sign up":
@@ -656,302 +473,138 @@ def generate_bar_graph(columns, rows):
             st.error(f"Error generating graph: {e}")
             return None     
 
-def listen():
-    """Listen to user's voice and return recognized text."""
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        #st.info("🎤 Listening... please speak your question clearly")
-        audio = r.listen(source)
-        try:
-            query = r.recognize_google(audio)
-            #st.success(f"🗣 You said: {query}")
-            return query
-        except sr.UnknownValueError:
-            st.warning("Sorry, I couldn't understand your voice. Please try again.")
-            return None
-        except sr.RequestError as e:
-            st.error(f"Could not request results; {e}")
-            return None
-
-# -----------------------------
-# KEYWORD BLOCKER (DB managed)
-# -----------------------------
-
-def get_blocked_keywords():
-    conn = connect_db()
-    cur = conn.cursor()
-    cur.execute("SELECT keyword FROM blocked_keywords")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return [r[0].lower() for r in rows]
-
-def add_blocked_keyword(keyword):
-    try:
-        conn = connect_db()
-        cur = conn.cursor()
-        cur.execute("INSERT INTO blocked_keywords (keyword) VALUES (%s)", (keyword.lower(),))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
-    except:
-        return False
-
-def delete_blocked_keyword(keyword):
-    conn = connect_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM blocked_keywords WHERE keyword = %s", (keyword.lower(),))
-    conn.commit()
-    cur.close()
-    conn.close()
-
-BLOCKED_RESPONSE = (
-    "⚠️ This question contains restricted content and cannot be processed. "
-    "Please ask something else."
-)
-
-def check_blocked_keywords(user_text):
-    keyword_list = get_blocked_keywords()
-    txt = user_text.lower()
-    return any(k in txt for k in keyword_list)
-
-
-def add_message(role, content, content_type="text", columns=None, rows=None, graph=None):
-    """
-    Safely add a new message to chat history only if it's not already there.
-    """
-    message = {
-        "role": role,
-        "content_type": content_type,
-        "content": content,
-        "columns": columns,
-        "rows": rows,
-        "graph": graph,
-    }
-
-    # Avoid duplicates by checking last message
-    if not st.session_state.chat_history or st.session_state.chat_history[-1] != message:
-        st.session_state.chat_history.append(message)
-
-
-# -------------------------
-# Part 2 (UI & chatbot view)
-# -------------------------
-from streamlit_chat_widget import chat_input_widget
-from streamlit_extras.bottom_container import bottom
-
 def chatbot():
     st.title("🤖 Chatbot")
+    question = st.chat_input("Fuel me with your questions...")
+    for idx, msg in enumerate(st.session_state.chat_history):
+        with st.chat_message(msg["role"]):
+            if msg.get("content_type") == "table":
+                st.dataframe([dict(zip(msg["columns"], row)) for row in msg["rows"]])
 
-    # --- Custom CSS ---
-    st.markdown("""
-        <style>
-        .main > div { padding-bottom: 120px !important; }
-        .stBottomContainer {
-            background-color: #0e1117 !important;
-            border-top: 1px solid #444 !important;
-            height: 80px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            padding: 10px 20px !important;
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            z-index: 5 !important;
-            box-shadow: 0 -3px 8px rgba(0,0,0,0.4);
-        }
-        .stBottomContainer textarea, .stBottomContainer input {
-            min-height: 45px !important;
-            font-size: 16px !important;
-            border-radius: 8px !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # --- Initialize session trackers ---
-    if "last_processed_input" not in st.session_state:
-        st.session_state.last_processed_input = None
-    if "processing" not in st.session_state:
-        st.session_state.processing = False
-
-    # --- Display only assistant + user messages (download only for assistant) ---
-    if st.session_state.chat_history:
-        for idx, msg in enumerate(st.session_state.chat_history):
-            role = msg["role"]
-            with st.chat_message(role):
-                if msg.get("content_type") == "table":
-                    st.dataframe([dict(zip(msg["columns"], row)) for row in msg["rows"]],
-                                 use_container_width=True)
-                    if msg.get("graph"):
+                fig_path = None
+                if "graph" in msg and msg["graph"]:
+                    try:
+                        import tempfile
+                        from reportlab.platypus import Image
+                        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                        tmpfile.write(msg["graph"])
+                        tmpfile.flush()
+                        tmpfile.close()
+                        fig_path = tmpfile.name
                         buf = io.BytesIO(msg["graph"])
-                        img = plt.imread(buf, format="png")
-                        fig, ax = plt.subplots()
+                        img = plt.imread(buf, format='png')
+                        fig = plt.figure()
+                        ax = fig.add_subplot(111)
                         ax.imshow(img)
                         ax.axis("off")
                         st.pyplot(fig)
-                    # --- Download only for assistant replies ---
-                    if role == "assistant":
-                        if not msg.get("pdf"):
-                            msg["pdf"] = create_pdf_response("User", {"columns": msg["columns"], "rows": msg["rows"]})
-                        st.download_button("📄 Download",
-                                           data=msg["pdf"],
-                                           file_name=f"chat_table_{idx}.pdf",
-                                           mime="application/pdf",
-                                           key=f"download_table_{idx}")
-                elif msg.get("content_type") == "text":
-                    st.markdown(msg["content"])
-                    # --- Download only for assistant replies ---
-                    if role == "assistant":
-                        if not msg.get("pdf"):
-                            msg["pdf"] = create_pdf_response("User", msg["content"])
-                        st.download_button("📄 Download",
-                                           data=msg["pdf"],
-                                           file_name=f"chat_text_{idx}.pdf",
-                                           mime="application/pdf",
-                                           key=f"download_text_{idx}")
 
-    # --- Bottom chat input widget ---
-    with bottom():
-        st.markdown(
-            """ <style> iframe[title="streamlit_chat_widget.chat_input_widget"] 
-            { 
-            height:80px!important;
-            width:100%!important;
-            min-height:80px!important; 
-            max-height:80px!important;
-            border:none!important;
-            overflow:hidden!important; 
-            } 
-            </style> 
-            """, unsafe_allow_html=True)
+                    except Exception as e:
+                        st.error(f"Failed to reload graph image: {e}")
 
-        user_input = chat_input_widget()
+                for j in range(idx - 1, -1, -1):
+                    if st.session_state.chat_history[j]["role"] == "user":
+                        user_msg = st.session_state.chat_history[j]["content"]
+                        break
+                else:
+                    user_msg = "Unknown"
 
-    # --- Process new input safely ---
-    if user_input and not st.session_state.processing:
-        st.session_state.processing = True
-
-        if "text" in user_input:
-            question = user_input["text"].strip()
-        else:
-            question = None
-
-        if question and question != st.session_state.last_processed_input:
-
-            # ---- Keyword Blocker ----
-            if check_blocked_keywords(question):
-                with st.chat_message("assistant"):
-                    st.markdown(BLOCKED_RESPONSE)
-
-                add_message("assistant", BLOCKED_RESPONSE, "text")
-
-                pdf_file = create_pdf_response(question, BLOCKED_RESPONSE)
+                pdf_file = create_pdf_response(user_msg, {
+                    "columns": msg["columns"],
+                    "rows": msg["rows"]
+                }, fig_path)
 
                 st.download_button(
-                    "📄 Download",
+                    label="📄 Download",
                     data=pdf_file,
-                    file_name="blocked_message.pdf",
+                    file_name="chat_table_response.pdf",
                     mime="application/pdf",
-                    key=f"blocked_download_{len(st.session_state.chat_history)}"
+                    key=f"download_table_{idx}"
+                )
+            elif msg["role"] == "assistant":
+                st.markdown(msg["content"])
+                
+                for j in range(idx - 1, -1, -1):
+                    if st.session_state.chat_history[j]["role"] == "user":
+                        user_msg = st.session_state.chat_history[j]["content"]
+                        break
+                else:
+                    user_msg = "Unknown"
+
+                pdf_file = create_pdf_response(user_msg, msg["content"])
+                st.download_button(
+                    label="📄 Download",
+                    data=pdf_file,
+                    file_name="chat_response.pdf",
+                    mime="application/pdf",
+                    key=f"download_text_{idx}"
                 )
 
-                st.session_state.processing = False
-                return
+            else:
+                st.markdown(msg["content"])
+    if question:
+        with st.chat_message("user"):
+            st.markdown(question)
+        st.session_state.chat_history.append({"role": "user", "content": question})
 
+        with st.chat_message("assistant"):
+            with st.spinner("Revving the engines...🚗💨"):
+                answer = ask_combined(question)
 
-            st.session_state.last_processed_input = question
+            if isinstance(answer, dict) and "columns" in answer and "rows" in answer:
+                st.dataframe([dict(zip(answer["columns"], row)) for row in answer["rows"]])
 
-            # --- User message ---
-            with st.chat_message("user"):
-                st.markdown(question)
-            add_message("user", question)
+                fig = None
+                fig_bytes = None
+                if user_requested_graph(question):
+                    fig = generate_bar_graph(answer["columns"], answer["rows"])
+                    if fig:
+                        st.pyplot(fig)
+                        buf = io.BytesIO()
+                        fig.savefig(buf, format="png")
+                        buf.seek(0)
+                        fig_bytes = buf.read()
+                    else:
+                        st.error("Unable to generate graph")
 
-            # --- Assistant response ---
-            with st.chat_message("assistant"):
-                with st.spinner("Revving the engines...🚗💨"):
-                    answer = ask_combined(question)
+                pdf_file = create_pdf_response(question, answer, fig)
+                st.download_button(
+                    label="📄 Download",
+                    data=pdf_file,
+                    file_name="query_response.pdf",
+                    mime="application/pdf",
+                    key=f"download_table_{len(st.session_state.chat_history)}"
+                )
 
-                # TABLE / GRAPH RESPONSE
-                if isinstance(answer, dict) and "columns" in answer and "rows" in answer:
-                    st.dataframe([dict(zip(answer["columns"], row)) for row in answer["rows"]],
-                                 use_container_width=True)
-                    fig, fig_bytes = None, None
-                    if user_requested_graph(question):
-                        fig = generate_bar_graph(answer["columns"], answer["rows"])
-                        if fig:
-                            st.pyplot(fig)
-                            buf = io.BytesIO()
-                            fig.savefig(buf, format="png")
-                            buf.seek(0)
-                            fig_bytes = buf.read()
-
-                    pdf_file = create_pdf_response(question, answer, fig)
-                    add_message("assistant", "", "table", answer["columns"], answer["rows"], fig_bytes)
-
-                    # ✅ Show download button instantly for current answer
-                    st.download_button("📄 Download",
-                                       data=pdf_file,
-                                       file_name="query_response.pdf",
-                                       mime="application/pdf",
-                                       key=f"download_current_table_{len(st.session_state.chat_history)}")
-
-                # ERROR RESPONSE
-                elif isinstance(answer, dict) and "error" in answer:
-                    st.error(answer["error"])
-                    add_message("assistant", answer["error"], "text")
-                    pdf_file = create_pdf_response(question, answer["error"])
-                    st.download_button("📄 Download",
-                                       data=pdf_file,
-                                       file_name="error_response.pdf",
-                                       mime="application/pdf",
-                                       key=f"download_error_{len(st.session_state.chat_history)}")
-
-                # TEXT RESPONSE
-                else:
-                    typing_effect(answer)
-
-                    # --- PDF ---
-                    pdf_file = create_pdf_response(question, answer)
-                    add_message("assistant", answer, "text")
-
-                    # --- Download Button (existing) ---
-                    # Create inline container for Download + Speak button
-                    btn_col = st.container()
-
-                    with btn_col:
-                        st.write(
-                            f"""
-                            <div style="display:flex; align-items:center; gap:14px; margin-top:6px;">
-                                <div id="download_btn_{len(st.session_state.chat_history)}"></div>
-                                <div id="tts_btn_wrap_{len(st.session_state.chat_history)}"></div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    # ---- DOWNLOAD BUTTON injected into first div ----
-                    st.download_button(
-                        "📄 Download",
-                        data=pdf_file,
-                        file_name="chat_response.pdf",
-                        mime="application/pdf",
-                        key=f"download_current_text_{len(st.session_state.chat_history)}"
-                    )
-
-                    # ---- TTS BUTTON injected into second div ----
-                    audio_b64 = generate_tts_audio(answer)
-                    if audio_b64:
-                        render_tts_button(
-                            audio_b64,
-                            key=f"tts_{len(st.session_state.chat_history)}"
-                        )
-
-
-        st.session_state.processing = False
-
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content_type": "table",
+                    "columns": answer["columns"],
+                    "rows": answer["rows"],
+                    "graph": fig_bytes
+                })
+            elif isinstance(answer, dict) and "error" in answer:
+                st.error(answer["error"])
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content_type": "text",
+                    "content": answer["error"]
+                })
+            else:
+                st.markdown(answer)
+                pdf_file = create_pdf_response(question, answer)
+                st.download_button(
+                    label="📄 Download",
+                    data=pdf_file,
+                    file_name="chat_response.pdf",
+                    mime="application/pdf",
+                    key=f"download_button_{len(st.session_state.chat_history)}"
+                )
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content_type": "text",
+                    "content": answer
+                })
 
 if not st.session_state.free_used and not st.session_state.logged_in:
     logo_img_url = "https://cdn-icons-png.flaticon.com/512/465/465077.png"
