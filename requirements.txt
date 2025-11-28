@@ -1,12 +1,24 @@
 streamlit
+streamlit-chat-widget
+streamlit-extras
+
 requests
 python-dotenv
+
 mysql-connector-python
 bcrypt
-matplotlib
-reportlab
 cffi
-pandas
+
+matplotlib
 pillow
+pandas
+
+reportlab
+
+SpeechRecognition
+pyaudio
+
+pyttsx3
+
 pytz
 backports.zoneinfo; python_version < '3.9'
