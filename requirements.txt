@@ -16,7 +16,7 @@ pandas
 reportlab
 
 SpeechRecognition
-pyaudio
+
 
 pyttsx3
 
